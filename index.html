@@ -1,0 +1,76 @@
+<!doctype html>
+<html dir="rtl" lang="ar"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Track Sender</title>
+<style>
+body{font-family:sans-serif;max-width:500px;margin:auto;padding:16px}
+.row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #ddd}
+.dot{width:14px;height:14px;border-radius:50%;background:#2ecc71}
+.dot.sent{background:#e74c3c}
+button{margin-inline-start:auto;padding:6px 14px}
+input{width:100%;padding:8px;box-sizing:border-box;margin-bottom:8px}
+</style>
+<h3>التوكن</h3>
+<input id="token" type="password" placeholder="Account token">
+<h3>رابط الروم</h3>
+<input id="chan" placeholder="https://discord.com/channels/SERVER_ID/CHANNEL_ID">
+<h3>الملفات</h3>
+<div id="list"></div>
+<script>
+const EXT = "mp3";
+const token = document.getElementById("token");
+const chan = document.getElementById("chan");
+token.value = localStorage.token || "";
+chan.value = localStorage.chan || "";
+token.onchange = () => localStorage.token = token.value.trim();
+chan.onchange = () => localStorage.chan = chan.value.trim();
+const sent = JSON.parse(localStorage.sent || "{}");
+
+function channelId() {
+  const m = chan.value.match(/channels\/(?:\d+|@me)\/(\d+)/);
+  return m && m[1];
+}
+
+async function load() {
+  for (let i = 1; ; i++) {
+    const url = `tracks/track${i}.${EXT}`;
+    const r = await fetch(url, { method: "HEAD" });
+    if (!r.ok) break;
+    addRow(i, url);
+  }
+}
+
+function addRow(i, url) {
+  const name = `track${i}.${EXT}`;
+  const row = document.createElement("div");
+  row.className = "row";
+  row.innerHTML = `<span class="dot ${sent[name] ? "sent" : ""}"></span>
+    <span>${name}</span><button>send</button>`;
+  const dot = row.querySelector(".dot"), btn = row.querySelector("button");
+  btn.onclick = async () => {
+    if (sent[name] && !confirm("أُرسل سابقاً، أرسله مرة أخرى؟")) return;
+    const id = channelId();
+    if (!token.value || !id) return alert("ضع التوكن ورابط الروم");
+    btn.disabled = true;
+    try {
+      const blob = await (await fetch(url)).blob();
+      const fd = new FormData();
+      fd.append("files[0]", blob, name);
+      fd.append("payload_json", JSON.stringify({ content: "" }));
+      const res = await fetch(`https://discord.com/api/v9/channels/${id}/messages`, {
+        method: "POST",
+        headers: { Authorization: token.value },
+        body: fd
+      });
+      if (!res.ok) throw new Error(res.status + " " + await res.text());
+      sent[name] = true;
+      localStorage.sent = JSON.stringify(sent);
+      dot.classList.add("sent");
+    } catch (e) { alert("فشل الإرسال: " + e.message); }
+    btn.disabled = false;
+  };
+  document.getElementById("list").append(row);
+}
+load();
+</script>
+</html>
